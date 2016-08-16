@@ -2,14 +2,240 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <link rel="stylesheet" type="text/css" href="https://cdn.mxpnl.com/libs/mixpanel-platform/css/reset.css">
-    <link rel="stylesheet" type="text/css" href="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.css">
+    <link rel="stylesheet" type="text/css" 
+          href="https://cdn.mxpnl.com/libs/mixpanel-platform/css/reset.css">
+    <link rel="stylesheet" type="text/css" 
+          href="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.css">
     <script src="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.js"></script>
   </head>
   <body class="mixpanel-platform-body">
-    <h1>Hello, World!</h1>
+
+  <div class="mixpanel-platform-section">
+    <div style="float:left;color:#4c5464;font-size:18px;">Auth success rate: intro_to_cb</div>
+    <div id="cbRateDateSelect" style="float: right;"></div>
+    <div style="clear: both;"></div>
+    <div id="cbRateGraph"></div>
+  </div>
+
+  <div class="mixpanel-platform-section">
+    <div style="float:left;color:#4c5464;font-size:18px;">Auth success rate: first_use</div>
+    <div id="firstUseRateDateSelect" style="float: right;"></div>
+    <div style="clear: both;"></div>
+    <div id="firstUseRateGraph"></div>
+  </div>
+  
+    <div class="mixpanel-platform-section">
+      <div style="float:left;color:#4c5464;font-size:18px;">funnels: first use auth</div>
+      <div id="authFunnelPlatformSelect" style="float:left;margin-left:20px;"></div>
+      <div id="authFunnelDateSelect" style="float: right;"></div>
+      <div style="clear: both;"></div>
+      <div id="authFunnelGraph"></div>    
+      <div id="authFunnelTable" style="margin-top:20px;"></div>
+    </div>
+      
+    <div class="mixpanel-platform-section">
+      <div style="float:left;color:#4c5464;font-size:18px;">ebates_shopping_trip by platform</div>
+      <div id="shopTripDateSelect" style="float: right;"></div>
+      <div id="shopTripTypeSelect" style="float:right;margin-right:20px;"></div>
+      <div style="clear: both;"></div>
+      <div id="shopTripGraph"></div>
+    </div>
+
+    <div class="mixpanel-platform-section" id="newEbatesSignup">
+      <div style="float:left;color:#4c5464;font-size:18px;">new ebates signups</div>
+      <div class="dateSelect" style="float: right;"></div> 
+      <div style="clear: both;"></div>
+      <div class="graph"></div>
+    </div>
+
     <script>
-      // Run queries and display results here
+      var cbRateDateSelect  = $('#cbRateDateSelect').MPDatepicker();
+      var cbRateGraph  = $('#cbRateGraph').MPChart({chartType: 'line'});
+      var firstUseRateDateSelect  = $('#firstUseRateDateSelect').MPDatepicker();
+      var firstUseRateGraph  = $('#firstUseRateGraph').MPChart({chartType: 'line'});
+
+      var runAuthRateQuery = function(dateSelectEle, graphEle, viewSource) {
+        var authSuccess = "auth_success",
+            authShown = "auth_shown",
+            dateRange = dateSelectEle.MPDatepicker('value');
+
+        var params = {
+          from: dateRange.from,
+          to: dateRange.to,
+          type: 'unique',
+          'where': 'properties["view_source"] == "' + viewSource + '"'
+        };
+        MP.api.segment(authSuccess, 'platform', params).done(function(authSuccessData) {
+          MP.api.segment(authShown, 'platform', params).done(function(authShownData){
+            var overallSuccess = {}, overallShown = {},
+                iosRate = {}, androidRate = {}, overallRate = {},
+                iosSuccess = authSuccessData.json.ios, iosShown = authShownData.json.ios,
+                androidSuccess = authSuccessData.json.android, androidShown = authShownData.json.android;
+            for (var key in androidSuccess) {
+              overallShown[key] = androidShown[key] + iosShown[key];
+              overallSuccess[key] = androidSuccess[key] + iosSuccess[key];
+              if (androidShown[key] == 0) {
+                androidRate[key] = 0;
+              } else {
+                androidRate[key] = androidSuccess[key] / androidShown[key];
+              }
+              if (iosShown[key] == 0) {
+                iosRate[key] = 0;
+              } else {
+                iosRate[key] = iosSuccess[key] / iosShown[key];
+              }
+              if (overallShown[key] == 0) {
+                overallRate[key] = 0;
+              } else {
+                overallRate[key] = overallSuccess[key] / overallShown[key];
+              }
+            }
+            var data = {};
+            data['ios'] = iosRate;
+            data['android'] = androidRate;
+            data['total'] = overallRate;
+            graphEle.MPChart('setData', data);
+          });
+        });
+      };
+      cbRateDateSelect.on('change',
+              function() {
+                runAuthRateQuery(cbRateDateSelect, cbRateGraph, 'intro_to_cb');
+              });
+      firstUseRateDateSelect.on('change',
+              function() {
+                runAuthRateQuery(firstUseRateDateSelect, firstUseRateGraph, 'first_use');
+              });
+      $(function() {
+        runAuthRateQuery(cbRateDateSelect, cbRateGraph, 'intro_to_cb');
+        runAuthRateQuery(firstUseRateDateSelect, firstUseRateGraph, 'first_use');
+      });
+
+      /* funnels */
+      var authFunnelDateSelect  = $('#authFunnelDateSelect').MPDatepicker();
+      var chartData = {}, tableData = {};
+      var platformOptions = {
+        items :[
+          {label: 'overall', value: '$overall'},
+          {label: 'ios', value: 'ios'},
+          {label: 'android', value: 'android'}
+        ]
+      };
+      var authFunnelPlatformSelect = $('#authFunnelPlatformSelect').MPSelect(platformOptions);
+      authFunnelPlatformSelect.on('change', function(e, selection){
+        authFunnelGraph.MPChart('setData', chartData[selection]);
+        authFunnelTable.MPTable('setData', tableData[selection]);
+      });
+
+      var authFunnelTable = $("#authFunnelTable").MPTable({
+        showPercentages: false
+      });
+      var highchartsOpts = {
+        plotOptions: {
+          series: {pointWidth: 60}
+        },
+        tooltip: {
+          enabled: false
+        }
+      };
+      var authFunnelGraph  = $('#authFunnelGraph').MPChart({chartType: 'bar', highchartsOptions:highchartsOpts});
+
+      var runAuthFunnelQuery = function() {
+        var dateRange = authFunnelDateSelect.MPDatepicker('value');
+        var event1 = {
+          event: 'auth_shown',
+          selector: 'properties["view_source"] == "first_use"'
+        };
+        var event2 = {
+          event: 'auth_password_screen_shown',
+          selector: 'properties["view_source"] == "first_use"'
+        };
+        var event3  = {
+          event: 'auth_success',
+          selector: 'properties["view_source"] == "first_use"'
+        };
+        var params = {
+          from: dateRange.from,
+          to: dateRange.to,
+          where: 'properties["view_source"] == "first_use"',
+          segment: 'platform',
+          interval: (dateRange.to.getTime() - dateRange.from.getTime())/(24*60*60*1000)+1
+        };
+        MP.api.funnel(event1, event2, event3, params).done(function(data){
+          for(var key in data) {
+            chartData[key] = {};
+            tableData[key] = {};
+            tableData[key][key] = {};
+            var counts = data[key][dateRange.from.toISOString().split('T')[0]];
+            for(var k in counts) {
+              chartData[key][counts[k]['event']] = {'count': counts[k]['count']};
+              tableData[key][key][parseInt(k)+1 + ' ' + counts[k]['event']] =
+                  counts[k]['count'] +
+                  ' (' + Math.round(counts[k]['overall_conv_ratio']*10000)/100 + '%)';
+            }
+          }
+          authFunnelGraph.MPChart('setData', chartData[authFunnelPlatformSelect.val()]);
+          authFunnelTable.MPTable('setData', tableData[authFunnelPlatformSelect.val()]);
+        })
+      };
+      authFunnelDateSelect.on('change', runAuthFunnelQuery);
+      $(function(){
+        runAuthFunnelQuery();
+      })
+
+      /* ebates shop trip */
+      var shopTripDateSelect  = $('#shopTripDateSelect').MPDatepicker();
+
+      var shopTripGraph  = $('#shopTripGraph').MPChart({chartType: 'line'});
+
+      var typeOptions = {
+        items: [
+        {label: 'Unique', value: 'unique'},
+        {label: 'Total', value: 'general'},
+        {label: 'Average', value: 'average'}
+        ]
+      }
+      var typeSelect = $("#shopTripTypeSelect").MPSelect(typeOptions);
+      typeSelect.on('change', function() {
+        runShopTripQuery();
+      })
+      var runShopTripQuery = function() {
+        var dateRange = shopTripDateSelect.MPDatepicker('value');
+        var params = {
+          from: dateRange.from,
+          to: dateRange.to,
+          type: typeSelect.val()
+        };
+
+        MP.api.segment('ebates_shopping_trip', 'platform', params).done(function(data) {
+          shopTripGraph.MPChart('setData', data);
+        });
+
+      };
+      shopTripDateSelect.on('change', runShopTripQuery);
+      $(function(){
+        runShopTripQuery();
+      })
+
+      /* new ebates signups */
+      var ebSignupDateSelect  = $('#newEbatesSignup .dateSelect').MPDatepicker();
+      var ebSignupGraph  = $('#newEbatesSignup .graph').MPChart({chartType: 'line'});
+      var runEbSignupQuery = function() {
+        var dateRange = ebSignupDateSelect.MPDatepicker('value');
+        var params = {
+          from: dateRange.from,
+          to: dateRange.to,
+          where: 'properties["eb_new_member"] == true'
+        };
+        MP.api.segment('auth_success', 'platform', params).done(function(data) {
+          ebSignupGraph.MPChart('setData', data);
+        });
+      };
+      ebSignupDateSelect.on('change', runEbSignupQuery);
+      $(function(){
+        runEbSignupQuery();
+      })
+
     </script>
   </body>
 </html>
