@@ -160,7 +160,7 @@
           where: 'properties["view_source"] == "first_use"',
           segment: 'platform',
           length: 1,
-          length_unit: 'day',
+          unit_length: 'day',
           interval: (dateRange.to.getTime() - dateRange.from.getTime())/(24*60*60*1000)+1
         };
         MP.api.funnel(event1, event2, event3, params).done(function(data){
